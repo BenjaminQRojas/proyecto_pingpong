@@ -9,3 +9,12 @@ COMPLETADO (Prompt IoT):
 -> DatabaseService para PostgreSQL con tabla sessions (JSONB)
 -> Dashboard con Sliders para velocidades y Emergency Stop
 -> Navegacion entre Control y Historial
+
+COMPLETADO (Mockup Design):
+-> Tema oscuro con paleta #0ea5e9 / #ff6b35 / #10b981
+-> Widgets reutilizables: AppCard, AppBadge, AppButton, AppSlider, VerticalSlider
+-> DashboardScreen con boton Start/Stop circular animado, presets, contador de pelotas
+-> PhysicsCalibrationScreen con visualizacion de trayectoria (CustomPaint)
+-> TechnicalSettingsScreen con configuracion MQTT y historial de sesiones
+-> StatsScreen mejorada con el nuevo diseno
+-> Navegacion inferior con 4 tabs: Control, Physics, Settings, Stats
