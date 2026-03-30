@@ -1,0 +1,15 @@
+Prompt de Inicialización (Copia y pega esto):
+
+    "Genera la estructura inicial de un proyecto Flutter para un Lanzador de Tenis de Mesa IoT.
+
+    Requisitos Técnicos:
+
+        Arquitectura: Usa una estructura de carpetas limpia: lib/core (configuraciones), lib/features/control (UI y lógica de motores), lib/features/stats (historial de sesiones) y lib/services (comunicaciones).
+
+        Dependencias (pubspec.yaml): Incluye mqtt_client para la comunicación con el broker Mosquitto y postgres para la base de datos relacional.
+
+        Modelo de Datos: Define una clase PingPongShot con los campos: topMotorSpeed (int), bottomMotorSpeed (int), horizontalAngle (int) y interval (double).
+
+        Lógica de Conexión: Crea un MqttService básico que se conecte a un broker (IP por defecto localhost) y un DatabaseService que maneje la inserción de una sesión en una tabla de PostgreSQL con una columna JSONB para la configuración del disparo.
+
+        Interfaz Sugerida: Un dashboard con controles deslizantes (Sliders) para las velocidades y un botón de 'EMERGENCY STOP' que publique un mensaje de prioridad 0 por MQTT."

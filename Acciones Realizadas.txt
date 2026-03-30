@@ -1,3 +1,11 @@
 REALIZADO
 -> creado proyecto flutter -> flutter create proyecto_pingpong
 -> añadido librerias -> flutter pub add mqtt_client postgres provider
+
+COMPLETADO (Prompt IoT):
+-> Estructura de carpetas: lib/core/models, lib/features/control, lib/features/stats, lib/services
+-> Modelo PingPongShot con topMotorSpeed, bottomMotorSpeed, horizontalAngle, interval
+-> MqttService para conexion con broker Mosquitto
+-> DatabaseService para PostgreSQL con tabla sessions (JSONB)
+-> Dashboard con Sliders para velocidades y Emergency Stop
+-> Navegacion entre Control y Historial
