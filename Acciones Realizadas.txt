@@ -1,0 +1,3 @@
+REALIZADO
+-> creado proyecto flutter -> flutter create proyecto_pingpong
+-> añadido librerias -> flutter pub add mqtt_client postgres provider
