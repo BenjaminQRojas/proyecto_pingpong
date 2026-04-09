@@ -32,45 +32,9 @@ class _TechnicalSettingsScreenState extends State<TechnicalSettingsScreen> {
   String _topicPrefix = 'pingpong/launcher';
   bool _saved = false;
   bool _connectionTested = false;
-  bool _isConnected = true;
+  bool _isConnected = false;
 
-  final List<TrainingSession> _sessions = [
-    TrainingSession(
-      id: '1',
-      date: '2026-03-24',
-      duration: '45m',
-      ballCount: 327,
-      preset: 'Pro-Drill',
-    ),
-    TrainingSession(
-      id: '2',
-      date: '2026-03-23',
-      duration: '32m',
-      ballCount: 218,
-      preset: 'Topspin',
-    ),
-    TrainingSession(
-      id: '3',
-      date: '2026-03-22',
-      duration: '28m',
-      ballCount: 189,
-      preset: 'Random',
-    ),
-    TrainingSession(
-      id: '4',
-      date: '2026-03-21',
-      duration: '51m',
-      ballCount: 412,
-      preset: 'Pro-Drill',
-    ),
-    TrainingSession(
-      id: '5',
-      date: '2026-03-20',
-      duration: '38m',
-      ballCount: 265,
-      preset: 'Backspin',
-    ),
-  ];
+  List<TrainingSession> _sessions = [];
 
   void _handleSave() {
     setState(() => _saved = true);
@@ -79,11 +43,8 @@ class _TechnicalSettingsScreenState extends State<TechnicalSettingsScreen> {
     });
   }
 
-  void _handleTestConnection() {
-    setState(() {
-      _connectionTested = true;
-      _isConnected = true;
-    });
+  void _handleTestConnection() async {
+    setState(() => _connectionTested = true);
   }
 
   String _formatDate(String dateStr) {
@@ -255,15 +216,51 @@ class _TechnicalSettingsScreenState extends State<TechnicalSettingsScreen> {
                   isBadge: true,
                 ),
               ),
-              Expanded(child: _buildInfoItem('Latency', '12ms')),
+              Expanded(
+                child: _buildInfoItem('Latency', _isConnected ? '—' : '—'),
+              ),
             ],
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: _buildInfoItem('Messages Sent', '1,247')),
-              Expanded(child: _buildInfoItem('Uptime', '3h 42m')),
+              Expanded(
+                child: _buildInfoItem(
+                  'Messages Sent',
+                  _isConnected ? '—' : '—',
+                ),
+              ),
+              Expanded(
+                child: _buildInfoItem('Uptime', _isConnected ? '—' : '—'),
+              ),
             ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.background.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  color: AppTheme.textSecondary,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Connect the ESP32 to see real-time data',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -325,14 +322,31 @@ class _TechnicalSettingsScreenState extends State<TechnicalSettingsScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          ..._sessions.map((session) => _buildSessionItem(session)),
-          const SizedBox(height: 12),
-          AppButton(
-            text: 'Load More Sessions',
-            outlined: true,
-            fullWidth: true,
-            onPressed: () {},
-          ),
+          if (_sessions.isEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              alignment: Alignment.center,
+              child: Column(
+                children: [
+                  Icon(Icons.history, color: AppTheme.textSecondary, size: 48),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No training sessions yet',
+                    style: TextStyle(color: AppTheme.textSecondary),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Sessions will appear after connecting the ESP32',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ..._sessions.map((session) => _buildSessionItem(session)),
         ],
       ),
     );
@@ -428,8 +442,8 @@ class _TechnicalSettingsScreenState extends State<TechnicalSettingsScreen> {
             style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
           ),
           const SizedBox(height: 12),
-          _buildSystemRow('Firmware Version', 'v2.4.1'),
-          _buildSystemRow('Hardware Model', 'ESP32-WROOM-32'),
+          _buildSystemRow('Firmware Version', '—'),
+          _buildSystemRow('Hardware Model', '—'),
           _buildSystemRow('App Version', '1.0.0'),
         ],
       ),
