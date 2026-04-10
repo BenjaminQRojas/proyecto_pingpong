@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../../services/mqtt_service.dart';
 
 class TrainingSession {
   final String id;
@@ -27,24 +29,61 @@ class TechnicalSettingsScreen extends StatefulWidget {
 }
 
 class _TechnicalSettingsScreenState extends State<TechnicalSettingsScreen> {
-  String _brokerIp = '192.168.1.100';
-  String _port = '1883';
-  String _topicPrefix = 'pingpong/launcher';
+  late TextEditingController _brokerController;
+  late TextEditingController _portController;
   bool _saved = false;
-  bool _connectionTested = false;
-  bool _isConnected = false;
+  bool _isTesting = false;
 
   List<TrainingSession> _sessions = [];
 
+  @override
+  void initState() {
+    super.initState();
+    final mqtt = context.read<MqttService>();
+    _brokerController = TextEditingController(text: mqtt.brokerIp);
+    _portController = TextEditingController(text: mqtt.port.toString());
+  }
+
+  @override
+  void dispose() {
+    _brokerController.dispose();
+    _portController.dispose();
+    super.dispose();
+  }
+
   void _handleSave() {
+    final mqtt = context.read<MqttService>();
+    mqtt.configure(
+      brokerIp: _brokerController.text,
+      port: int.tryParse(_portController.text) ?? 1883,
+    );
     setState(() => _saved = true);
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) setState(() => _saved = false);
     });
   }
 
-  void _handleTestConnection() async {
-    setState(() => _connectionTested = true);
+  Future<void> _handleTestConnection() async {
+    setState(() => _isTesting = true);
+    final mqtt = context.read<MqttService>();
+    mqtt.configure(
+      brokerIp: _brokerController.text,
+      port: int.tryParse(_portController.text) ?? 1883,
+    );
+    final success = await mqtt.connect();
+    if (mounted) {
+      setState(() => _isTesting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            success
+                ? 'Connected successfully!'
+                : 'Connection failed: ${mqtt.lastError}',
+          ),
+          backgroundColor: success ? AppTheme.success : AppTheme.error,
+        ),
+      );
+    }
   }
 
   String _formatDate(String dateStr) {
@@ -132,35 +171,18 @@ class _TechnicalSettingsScreenState extends State<TechnicalSettingsScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          _buildTextField(
-            'Broker IP Address',
-            _brokerIp,
-            (v) => setState(() => _brokerIp = v),
-            hint: '192.168.1.100',
-          ),
+          _buildBrokerField(),
           const SizedBox(height: 12),
-          _buildTextField(
-            'Port',
-            _port,
-            (v) => setState(() => _port = v),
-            hint: '1883',
-          ),
-          const SizedBox(height: 12),
-          _buildTextField(
-            'Topic Prefix',
-            _topicPrefix,
-            (v) => setState(() => _topicPrefix = v),
-            hint: 'pingpong/launcher',
-          ),
+          _buildPortField(),
           const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
                 child: AppButton(
-                  text: 'Test Connection',
+                  text: _isTesting ? 'Testing...' : 'Test Connection',
                   icon: Icons.refresh,
                   outlined: true,
-                  onPressed: _handleTestConnection,
+                  onPressed: _isTesting ? null : _handleTestConnection,
                 ),
               ),
               const SizedBox(width: 12),
@@ -178,92 +200,106 @@ class _TechnicalSettingsScreenState extends State<TechnicalSettingsScreen> {
     );
   }
 
-  Widget _buildTextField(
-    String label,
-    String value,
-    ValueChanged<String> onChanged, {
-    String? hint,
-  }) {
+  Widget _buildBrokerField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: AppTheme.textSecondary)),
+        Text(
+          'Broker IP Address',
+          style: const TextStyle(color: AppTheme.textSecondary),
+        ),
         const SizedBox(height: 8),
         TextFormField(
-          initialValue: value,
-          onChanged: onChanged,
+          controller: _brokerController,
           style: const TextStyle(
             color: AppTheme.textPrimary,
             fontFamily: 'monospace',
           ),
-          decoration: InputDecoration(hintText: hint, isDense: true),
+          decoration: const InputDecoration(
+            hintText: '192.168.1.100',
+            isDense: true,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPortField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Port', style: const TextStyle(color: AppTheme.textSecondary)),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _portController,
+          keyboardType: TextInputType.number,
+          style: const TextStyle(
+            color: AppTheme.textPrimary,
+            fontFamily: 'monospace',
+          ),
+          decoration: const InputDecoration(hintText: '1883', isDense: true),
         ),
       ],
     );
   }
 
   Widget _buildConnectionInfo() {
-    return AppCard(
-      gradient: true,
-      child: Column(
-        children: [
-          Row(
+    return Consumer<MqttService>(
+      builder: (context, mqtt, _) {
+        return AppCard(
+          gradient: true,
+          child: Column(
             children: [
-              Expanded(
-                child: _buildInfoItem(
-                  'Connection',
-                  _isConnected ? 'Active' : 'Inactive',
-                  isBadge: true,
-                ),
-              ),
-              Expanded(
-                child: _buildInfoItem('Latency', _isConnected ? '—' : '—'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildInfoItem(
-                  'Messages Sent',
-                  _isConnected ? '—' : '—',
-                ),
-              ),
-              Expanded(
-                child: _buildInfoItem('Uptime', _isConnected ? '—' : '—'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppTheme.background.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.info_outline,
-                  color: AppTheme.textSecondary,
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Connect the ESP32 to see real-time data',
-                    style: TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 13,
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildInfoItem(
+                      'Connection',
+                      mqtt.isConnected ? 'Active' : 'Inactive',
+                      isBadge: true,
                     ),
                   ),
+                  Expanded(
+                    child: _buildInfoItem(
+                      'Messages Sent',
+                      mqtt.isConnected ? '${mqtt.messagesSent}' : '—',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.background.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-              ],
-            ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      color: AppTheme.textSecondary,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        mqtt.isConnected
+                            ? 'Connected to ${mqtt.brokerIp}:${mqtt.port}'
+                            : 'Configure and connect to Mosquitto broker',
+                        style: TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 

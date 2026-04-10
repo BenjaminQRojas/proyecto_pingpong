@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../services/mqtt_service.dart';
@@ -14,10 +15,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen>
     with SingleTickerProviderStateMixin {
-  final MqttService _mqttService = MqttService();
-
   bool _isActive = false;
-  bool _isConnected = false;
   int _frequency = 60;
   int _oscillation = 50;
   int _ballsLaunched = 0;
@@ -56,7 +54,6 @@ class _DashboardScreenState extends State<DashboardScreen>
   @override
   void initState() {
     super.initState();
-    _initConnection();
     _pulseController = AnimationController(
       duration: const Duration(seconds: 2),
       vsync: this,
@@ -66,20 +63,25 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  Future<void> _initConnection() async {
-    final connected = await _mqttService.connect();
-    setState(() => _isConnected = connected);
-  }
-
   @override
   void dispose() {
     _ballTimer?.cancel();
     _pulseController.dispose();
-    _mqttService.disconnect();
     super.dispose();
   }
 
   void _handleStartStop() {
+    final mqtt = context.read<MqttService>();
+    if (!mqtt.isConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Not connected to MQTT broker'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _isActive = !_isActive;
       if (_isActive) {
@@ -106,17 +108,19 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   void _sendCommand() {
+    final mqtt = context.read<MqttService>();
     final shot = PingPongShot(
       topMotorSpeed: _frequency,
       bottomMotorSpeed: _oscillation,
       horizontalAngle: 90,
       interval: 60 / _frequency,
     );
-    _mqttService.sendShotCommand(shot);
+    mqtt.sendShotCommand(shot);
   }
 
   void _emergencyStop() {
-    _mqttService.emergencyStop();
+    final mqtt = context.read<MqttService>();
+    mqtt.emergencyStop();
     setState(() {
       _isActive = false;
       _ballTimer?.cancel();
@@ -162,128 +166,147 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Widget _buildHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Consumer<MqttService>(
+      builder: (context, mqtt, _) {
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
-              'Launcher Control',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textPrimary,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Launcher Control',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'IoT Ping Pong System',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+                ),
+              ],
+            ),
+            IconButton(
+              onPressed: () async {
+                if (!mqtt.isConnected) {
+                  await mqtt.connect();
+                } else {
+                  mqtt.disconnect();
+                }
+              },
+              icon: Icon(
+                mqtt.isConnected ? Icons.wifi : Icons.wifi_off,
+                color: mqtt.isConnected ? AppTheme.success : AppTheme.error,
+                size: 28,
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              'IoT Ping Pong System',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
-            ),
           ],
-        ),
-        IconButton(
-          onPressed: () => setState(() => _isConnected = !_isConnected),
-          icon: Icon(
-            _isConnected ? Icons.wifi : Icons.wifi_off,
-            color: _isConnected ? AppTheme.success : AppTheme.error,
-            size: 28,
-          ),
-        ),
-      ],
+        );
+      },
     );
   }
 
   Widget _buildConnectionStatus() {
-    return AppCard(
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Text(
-            'Device Status',
-            style: TextStyle(color: AppTheme.textSecondary),
+    return Consumer<MqttService>(
+      builder: (context, mqtt, _) {
+        return AppCard(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Device Status',
+                style: TextStyle(color: AppTheme.textSecondary),
+              ),
+              AppBadge(
+                text: mqtt.isConnected ? 'ESP32-Online' : 'Disconnected',
+                color: mqtt.isConnected ? AppTheme.success : AppTheme.error,
+              ),
+            ],
           ),
-          AppBadge(
-            text: _isConnected ? 'ESP32-Online' : 'Disconnected',
-            color: _isConnected ? AppTheme.success : AppTheme.error,
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
   Widget _buildMainButton() {
-    return Center(
-      child: GestureDetector(
-        onTap: _isConnected ? _handleStartStop : null,
-        child: AnimatedBuilder(
-          animation: _pulseAnimation,
-          builder: (context, child) {
-            return Container(
-              width: 192,
-              height: 192,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: _isActive
-                      ? [AppTheme.secondary, const Color(0xFFf97316)]
-                      : [AppTheme.primary, AppTheme.primaryDark],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: (_isActive ? AppTheme.secondary : AppTheme.primary)
-                        .withOpacity(0.4),
-                    blurRadius: 40,
-                    spreadRadius: _isActive ? 0 : 0,
-                  ),
-                ],
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  if (_isActive)
-                    Transform.scale(
-                      scale: _pulseAnimation.value,
-                      child: Container(
-                        width: 192,
-                        height: 192,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: AppTheme.secondary,
-                            width: 4,
-                          ),
-                        ),
-                      ),
+    return Consumer<MqttService>(
+      builder: (context, mqtt, _) {
+        return Center(
+          child: GestureDetector(
+            onTap: mqtt.isConnected ? _handleStartStop : null,
+            child: AnimatedBuilder(
+              animation: _pulseAnimation,
+              builder: (context, child) {
+                return Container(
+                  width: 192,
+                  height: 192,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: _isActive
+                          ? [AppTheme.secondary, const Color(0xFFf97316)]
+                          : [AppTheme.primary, AppTheme.primaryDark],
                     ),
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        _isActive ? Icons.stop_circle : Icons.play_circle,
-                        size: 80,
-                        color: Colors.white,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _isActive ? 'STOP' : 'START',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 20,
-                        ),
+                    boxShadow: [
+                      BoxShadow(
+                        color:
+                            (_isActive ? AppTheme.secondary : AppTheme.primary)
+                                .withOpacity(0.4),
+                        blurRadius: 40,
+                        spreadRadius: _isActive ? 0 : 0,
                       ),
                     ],
                   ),
-                ],
-              ),
-            );
-          },
-        ),
-      ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      if (_isActive)
+                        Transform.scale(
+                          scale: _pulseAnimation.value,
+                          child: Container(
+                            width: 192,
+                            height: 192,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppTheme.secondary,
+                                width: 4,
+                              ),
+                            ),
+                          ),
+                        ),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            _isActive ? Icons.stop_circle : Icons.play_circle,
+                            size: 80,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _isActive ? 'STOP' : 'START',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 
