@@ -1,0 +1,338 @@
+═══════════════════════════════════════════════════════════════════════════════
+                    EXPLICACIÓN DEL PROYECTO PING PONG IoT
+═══════════════════════════════════════════════════════════════════════════════
+
+Este proyecto es una aplicación Flutter para controlar un lanzador de pelotas 
+de ping pong via MQTT, con base de datos PostgreSQL para guardar sesiones.
+
+═══════════════════════════════════════════════════════════════════════════════
+                              ESTRUCTURA DEL PROYECTO
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ lib/                                                                        │
+│ ├── main.dart                    → Punto de entrada de la aplicación        │
+│ │                                                                           │
+│ ├── core/                       → Componentes centrales y reutilizables     │
+│ │   ├── models/                                                             │
+│ │   │   └── ping_pong_shot.dart    → Modelo de datos para un tiro           │
+│ │   │                                    (velocidad motor, ángulo,          │
+│ │   │                                    intervalo)                         │
+│ │   │                                                                       │
+│ │   ├── theme/                                                              │
+│ │   │   └── app_theme.dart          → Configuración del tema oscuro         │
+│ │   │                                    de la app (colores, estilos)       │
+│ │   │                                                                       │
+│ │   └── widgets/                                                            │
+│ │       ├── widgets.dart           → Exporta todos los widgets              │
+│ │       ├── app_button.dart        → Botón personalizado (sólido/outline)   │
+│ │       ├── app_card.dart          → Tarjeta contenedor con gradiente       │
+│ │       ├── app_badge.dart         → Insignia/etiqueta coloured             │
+│ │       ├── app_slider.dart        → Slider horizontal con etiquetas        │
+│ │       ├── vertical_slider.dart   → Slider vertical rotado 90°             │
+│ │       └── app_text_field.dart    → Campo de texto estilizado              │
+│ │                                                                           │
+│ ├── services/                   → Servicios externos y lógica de negocio    │
+│ │   ├── mqtt_service.dart        → Cliente MQTT para comunicación con       │
+│ │   │                                el dispositivo (ESP32/Arduino)         │
+│ │   │                                - Conexión al broker                   │
+│ │   │                                - Suscripción a topics                 │
+│ │   │                                - Publicar comandos de tiro            │
+│ │   │                                - Parada de emergencia                 │
+│ │   │                                                                       │
+│ │   └── database_service.dart    → Servicio de base de datos PostgreSQL     │
+│ │                                    - Conexión a la DB                     │
+│ │                                    - Insertar sesiones                    │
+│ │                                    - Consultar historial                  │
+│ │                                                                           │
+│ └── features/                  → Funcionalidades de la app organizadas      │
+│     ├── home/                                                               │
+│     │   └── home_screen.dart     → Pantalla principal con navegación        │
+│     │                                inferior (4 pestañas)                  │
+│     │                                                                       │
+│     ├── control/                                                            │
+│     │   └── screens/                                                        │
+│     │       ├── dashboard_screen.dart    → Panel principal de control       │
+│     │       │                                    - Estado de conexión       │
+│     │       │                                    - Botón iniciar/parar      │
+│     │       │                                    - Contador de pelotas      │
+│     │       │                                    - Frecuencia de lanzamiento│
+│     │       │                                    - Oscilación horizontal    │
+│     │       │                                    - Presets rápidos          │
+│     │       │                                    - Botón de emergencia      │
+│     │       │                                                               │
+│     │       ├── physics_calibration_screen.dart → Calibración de física     │
+│     │       │                                    - Visualización de         │
+│     │       │                                      trayectoria              │
+│     │       │                                    - Control motor superior   │
+│     │       │                                    - Control motor inferior   │
+│     │       │                                    - Indicador de spin        │
+│     │       │                                                               │
+│     │       └── technical_settings_screen.dart → Configuración técnica      │
+│     │                                              - IP del broker MQTT     │
+│     │                                              - Puerto MQTT            │
+│     │                                              - Prueba de conexión     │
+│     │                                              - Info del sistema       │
+│     │                                                                       │
+│     └── stats/                                                              │
+│         └── stats_screen.dart   → Historial de sesiones de entrenamiento    │
+│                                      - Lista de sesiones pasadas            │
+│                                      - Detalles de configuración            │
+│                                      - Nombre del jugador                   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+                              DESCRIPCIÓN DE CADA ARCHIVO
+═══════════════════════════════════════════════════════════════════════════════
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ lib/main.dart                                                                │
+│ ──────────────────────────────────────────────────────────────────────────   │
+│ PROPÓSITO: Inicializa la aplicación Flutter                                  │
+│ FUNCIONALIDAD:                                                               │
+│   • Configura el estilo de la barra de estado (transparente)                 │
+│   • Crea el Provider para MqttService (estado global)                        │
+│   • Define el tema oscuro de la app                                          │
+│   • Define la pantalla inicial (HomeScreen)                                  │
+│                                                                              │
+│ IMPORTANTE: Usa Provider para gestión de estado reactivo                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ lib/core/models/ping_pong_shot.dart                                          │
+│ ──────────────────────────────────────────────────────────────────────────   │
+│ PROPÓSITO: Modelo de datos para un tiro de ping pong                         │
+│ ATRIBUTOS:                                                                   │
+│   • topMotorSpeed: Velocidad del motor superior (0-100)                      │
+│   • bottomMotorSpeed: Velocidad del motor inferior (0-100)                   │
+│   • horizontalAngle: Ángulo horizontal de lanzamiento (0-90°)                │
+│   • interval: Intervalo entre lanzamientos (segundos)                        │
+│ MÉTODOS:                                                                     │
+│   • toJson(): Convierte a JSON para enviar por MQTT                          │
+│   • fromJson(): Crea instancia desde JSON recibido                           │
+│   • copyWith(): Crea copia con valores modificados                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ lib/core/theme/app_theme.dart                                                │
+│ ──────────────────────────────────────────────────────────────────────────   │
+│ PROPÓSITO: Define la apariencia visual de toda la aplicación                 │
+│ CONTENIDO:                                                                   │
+│   • Paleta de colores (primary, secondary, success, error, backgrounds)      │
+│   • Tema oscuro (dark theme) para MaterialApp                                │
+│   • Estilos de: AppBar, Card, Botones, Inputs, Sliders, NavigationBar        │
+│   • Colores usando constante Color(0xFF...) para consistencia                │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ lib/core/widgets/ (6 widgets reutilizables)                                  │
+│ ──────────────────────────────────────────────────────────────────────────   │
+│                                                                              │
+│ app_button.dart                                                              │
+│   Widget: Botón personalizado con opciones:                                  │
+│     - filled (sólido) o outlined (solo borde)                                │
+│     - Icono opcional                                                         │
+│     - Color personalizado                                                    │
+│     - Ancho completo opcional                                                │
+│                                                                              │
+│ app_card.dart                                                                │
+│   Widget: Contenedor con borde, fondo y opcional gradiente                   │
+│     - Borde redondeado (12px)                                                │
+│     - Borde visible                                                          │
+│     - Gradiente opcional para destacados                                     │
+│                                                                              │
+│ app_badge.dart                                                               │
+│   Widget: Insignia/etiqueta pequeña colored                                  │
+│     - Fondo con opacidad o outline                                           │
+│     - Uso: mostrar estado, tags, indicadores                                 │
+│                                                                              │
+│ app_slider.dart                                                              │
+│   Widget: Slider horizontal con etiqueta de valor                            │
+│     - Muestra valor actual y rango (min-max)                                 │
+│     - Color personalizable                                                   │
+│     - Paso configurable                                                      │
+│                                                                              │
+│ vertical_slider.dart                                                         │
+│   Widget: Slider rotado para usar en orientación vertical                    │
+│     - Útil para controles de volumen/intensidad                              │
+│     - Rotación de 90° (quarterTurns: 3)                                      │
+│                                                                              │
+│ app_text_field.dart                                                          │
+│   Widget: Campo de texto con label y estilo consistente                      │
+│     - Soporte para fuente monospace                                          │
+│     - Estilo visual coherente con el tema                                    │
+│                                                                              │
+│ widgets.dart                                                                 │
+│   Archivo que exporta todos los widgets para importarlos fácilmente          │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ lib/services/mqtt_service.dart                                               │
+│ ──────────────────────────────────────────────────────────────────────────   │
+│ PROPÓSITO: Gestionar comunicación MQTT con el dispositivo físico             │
+│                                                                              │
+│ CONFIGURACIÓN:                                                               │
+│   • Broker por defecto: 192.168.1.100:1883                                   │
+│   • Auto-reconexión habilitada                                               │
+│   • Keep-alive: 60 segundos                                                  │
+│                                                                              │
+│ MÉTODOS PRINCIPALES:                                                         │
+│   • configure(brokerIp, port): Configura el broker                           │
+│   • connect(): Conecta al broker MQTT                                        │
+│   • disconnect(): Desconecta                                                 │
+│   • sendShotCommand(shot): Envía configuración de tiro                       │
+│   • emergencyStop(): Envía comando de parada de emergencia                   │
+│                                                                              │
+│ SUSCRIPCIONES:                                                               │
+│   • pingpong/status: Recibe estado del dispositivo                           │
+│   • pingpong/data: Recibe datos de sensores                                  │
+│                                                                              │
+│ PUBLICACIONES:                                                               │
+│   • pingpong/control: Envía comandos de tiro                                 │
+│   • pingpong/emergency: Comandos de emergencia                               │
+│                                                                              │
+│ ESTADO: ChangeNotifier → Notifica cambios a la UI                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ lib/services/database_service.dart                                           │
+│ ──────────────────────────────────────────────────────────────────────────   │
+│ PROPÓSITO: Gestionar base de datos PostgreSQL para sesiones                  │
+│                                                                              │
+│ CONFIGURACIÓN:                                                               │
+│   • Host: localhost:5432                                                     │
+│   • Database: pingpong                                                       │
+│   • User: postgres                                                           │
+│   • Password: postgres                                                       │
+│   • Sin SSL                                                                  │
+│                                                                              │
+│ TABLA sessions:                                                              │
+│   • id: INTEGER PRIMARY KEY (auto)                                           │
+│   • created_at: TIMESTAMP                                                    │
+│   • player_name: VARCHAR                                                     │
+│   • shot_config: JSONB (configuración del tiro)                              │
+│                                                                              │
+│ MÉTODOS:                                                                     │
+│   • configure(): Cambiar conexión                                            │
+│   • connect(): Conectar a la base de datos                                   │
+│   • disconnect(): Desconectar                                                │
+│   • insertSession(shot, playerName): Guardar sesión                          │
+│   • getSessions(limit): Obtener historial de sesiones                        │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ lib/features/home/home_screen.dart                                           │
+│ ──────────────────────────────────────────────────────────────────────────   │
+│ PROPÓSITO: Pantalla principal con navegación inferior                        │
+│ NAVEGACIÓN: 4 pestañas                                                       │
+│   1. Control (Dashboard) - Icono: dashboard                                  │
+│   2. Physics (Calibración) - Icono: tune                                     │
+│   3. Settings (Técnico) - Icono: settings                                    │
+│   4. Stats (Estadísticas) - Icono: bar_chart                                 │
+│                                                                              │
+│ IMPLEMENTACIÓN: IndexedStack para mantener estado de cada pestaña            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ lib/features/control/screens/                                                │
+│ ──────────────────────────────────────────────────────────────────────────   │
+│                                                                              │
+│ dashboard_screen.dart                                                        │
+│   PANTALLA PRINCIPAL DE CONTROL DEL LANZADOR                                 │
+│                                                                              │
+│   ELEMENTOS:                                                                 │
+│     • Indicador de conexión MQTT (verde/rojo)                                │
+│     • Botón grande INICIAR con animación de pulso cuando activo              │
+│     • Contador de pelotas lanzadas                                           │
+│     • Slider de FRECUENCIA (10-120 BPM)                                      │
+│     • Slider de OSCILACIÓN HORIZONTAL (0-90°)                                │
+│     • 4 PRESETS RÁPIDOS:                                                     │
+│       - Topspin (golpe ofensivo)                                             │
+│       - Backspin (golpe defensivo)                                           │
+│       - Random (aleatorio)                                                   │
+│       - Pro-Drills (ejercicios profesionales)                                │
+│     • Botón de PARADA DE EMERGENCIA (rojo, prominente)                       │
+│                                                                              │
+│                                                                              │
+│ physics_calibration_screen.dart                                              │
+│   PANTALLA DE CALIBRACIÓN DE FÍSICA DEL LANZADOR                             │
+│                                                                              │
+│   ELEMENTOS:                                                                 │
+│     • Visualizador de trayectoria (CustomPainter)                            │
+│     • Slider para motor SUPERIOR (velocidad)                                 │
+│     • Slider para motor INFERIOR (velocidad)                                 │
+│     • Indicador de tipo de spin:                                             │
+│       - Topspin (rotación hacia adelante)                                    │
+│       - Backspin (rotación hacia atrás)                                      │
+│       - Neutral (sin spin)                                                   │
+│     • Presets de ajuste rápido                                               │
+│                                                                              │
+│                                                                              │
+│ technical_settings_screen.dart                                               │
+│   PANTALLA DE CONFIGURACIÓN TÉCNICA                                          │
+│                                                                              │
+│   ELEMENTOS:                                                                 │
+│     • Campo para IP del broker MQTT                                          │
+│     • Campo para puerto MQTT                                                 │
+│     • Botón de PROBAR CONEXIÓN                                               │
+│     • Indicador de estado de conexión                                        │
+│     • Sección de INFO DEL SISTEMA:                                           │
+│       - Versión del firmware                                                 │
+│       - Hardware                                                             │
+│       - Versión de la app                                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ lib/features/stats/stats_screen.dart                                         │
+│ ──────────────────────────────────────────────────────────────────────────   │
+│ PROPÓSITO: Mostrar historial de sesiones de entrenamiento                    │
+│                                                                              │
+│ ELEMENTOS:                                                                   │
+│   • Lista de sesiones pasadas (scrollable)                                   │
+│   • Cada sesión muestra:                                                     │
+│     - Fecha y hora                                                           │
+│     - Nombre del jugador                                                     │
+│     - Configuración del tiro (velocidades, ángulo, intervalo)                │
+│     - ID de sesión                                                           │
+│                                                                              │
+│ DATOS: Obtenidos desde PostgreSQL vía DatabaseService                        │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+                              FLUJO DE DATOS
+═══════════════════════════════════════════════════════════════════════════════
+
+┌────────────────┐              ┌─────────────┐              ┌───────────────┐
+│  App Flutter   │   MQTT       │ MQTT Broker │   MQTT       │ ESP32/Arduino │
+│                │◄────────────►│             │◄────────────►│ (Lanzador)    │
+│ ┌────────────┐ │              └─────────────┘              └───────────────┘
+│ │ MqttService│ │ (envía comandos, recibe estado)
+│ └────────────┘ │
+│ ┌───────────┐  │   Directo      ┌────────────┐
+│ │DatabaseSvc│  │►──────────────►│ PostgreSQL │
+│ └───────────┘  │                │ (sesiones) │
+└────────────────┘                └────────────┘
+
+NOTAS IMPORTANTES:
+• El MQTT Broker NO conecta a la base de datos - Son sistemas independientes
+• La app tiene dos conexiones independientes:─
+  - MQTT: comunicación con el dispositivo físico (ESP32)
+  - PostgreSQL: almacenamiento directo de sesiones
+• El flujo de guardado de sesión va directo: App → PostgreSQL (no pasa por MQTT)
+• El ESP32 envía datos de sensores (temperatura, velocidad, etc.) por MQTT
+  y la app los muestra en la interfaz
+
+═══════════════════════════════════════════════════════════════════════════════
+                              TECNOLOGÍAS USADAS
+═══════════════════════════════════════════════════════════════════════════════
+
+• Flutter (Dart) - Framework UI
+• Provider - Gestión de estado
+• mqtt_client - Cliente MQTT
+• postgres - Conexión a PostgreSQL
+• Material Design 3 - Componentes UI
+
+═══════════════════════════════════════════════════════════════════════════════
+                                    FIN
+═══════════════════════════════════════════════════════════════════════════════
