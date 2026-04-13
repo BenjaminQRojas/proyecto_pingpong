@@ -1,5 +1,20 @@
 REALIZADO
 -> creado proyecto flutter -> flutter create proyecto_pingpong
--> añadido librerias -> flutter pub add mqtt_client postgres provider
+-> añadido librerías -> flutter pub add mqtt_client postgres provider
 -> añadido a repositorio de github
+-> creada conexión a mosquitto broker
+-> conexión exitosa con ESP32
+
+POR HACER
+-> avanzar pestaña "physics"
+-> settings
+	-> añadir información en "system information"
+	-> modificar sección de "training sessions"
+-> avanzar pestaña "stats"
+-> control
+	-> hacer funcionar botones de la sección "quick presets"
+	-> hacer funcionar el botón "emergency stop"
+-> conectar aplicación a una base de datos
+-> guardar datos en la base de datos
+-> pasar aplicación flutter a apk
 
