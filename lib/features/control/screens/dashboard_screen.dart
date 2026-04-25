@@ -88,6 +88,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         _ballsLaunched = 0;
         _startLaunching();
         _pulseController.repeat(reverse: true);
+        _sendCommand(start: true);
       } else {
         _ballTimer?.cancel();
         _pulseController.stop();
@@ -107,7 +108,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  void _sendCommand() {
+  void _sendCommand({bool start = false}) {
     final mqtt = context.read<MqttService>();
     final shot = PingPongShot(
       topMotorSpeed: _frequency,
@@ -115,7 +116,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       horizontalAngle: 90,
       interval: 60 / _frequency,
     );
-    mqtt.sendShotCommand(shot);
+    mqtt.sendShotCommand(shot, start: start);
   }
 
   void _emergencyStop() {
