@@ -1,0 +1,391 @@
+================================================================================
+  DIAGRAMA DE BASE DE DATOS - Ping Pong IoT
+  Motor: SQLite (local) | Archivo: pingpong.db
+================================================================================
+
+  +==========================================================================+
+  |                        training_sessions                                 |
+  +==========================================================================+
+  | id                  | INTEGER  | PK, AUTOINCREMENT                       |
+  | created_at          | TEXT     | NOT NULL  (ISO 8601)                    |
+  | player_name         | TEXT     | NOT NULL  DEFAULT 'Unknown'             |
+  | preset              | TEXT     | NULLABLE  (topspin/backspin/random/...)  |
+  | duration_seconds    | INTEGER  | DEFAULT 0                               |
+  | ball_count          | INTEGER  | DEFAULT 0                               |
+  | top_motor_speed     | INTEGER  | NULLABLE  (0-100)                       |
+  | bottom_motor_speed  | INTEGER  | NULLABLE  (0-100)                       |
+  | horizontal_angle    | INTEGER  | NULLABLE  (0-180, default 90)           |
+  | launch_interval     | REAL     | NULLABLE  (segundos, default 1.0)       |
+  +==========================================================================+
+       |
+       | 1:N (opcional)
+       |
+  +==========================================================================+
+  |                        sensor_readings                                   |
+  +==========================================================================+
+  | id                  | INTEGER  | PK, AUTOINCREMENT                       |
+  | session_id          | INTEGER  | FK -> training_sessions(id), NULLABLE   |
+  | timestamp           | TEXT     | NOT NULL  (ISO 8601)                    |
+  | topic               | TEXT     | NOT NULL  (status/data)                 |
+  | balls_returned      | INTEGER  | NULLABLE  (cuenta sensor IR-08H)        |
+  | voltage             | REAL     | NULLABLE  (V)                           |
+  | payload_json        | TEXT     | NULLABLE  (payload MQTT original)       |
+  +==========================================================================+
+
+
+================================================================================
+  ÍNDICES
+================================================================================
+
+  Nombre                        Tabla              Columnas
+  ----------------------------  -----------------  ---------------------------
+  idx_sessions_created          training_sessions  created_at DESC
+  idx_sensors_session           sensor_readings    session_id
+  idx_sensors_timestamp         sensor_readings    timestamp DESC
+
+
+================================================================================
+  ESTRUCTURA DETALLADA - training_sessions
+================================================================================
+
+  Descripción:
+    Almacena cada sesión de entrenamiento realizada con el lanzador de
+    ping pong. Una sesión representa un conjunto de disparos configurados
+    con parámetros específicos de motor y ejecutados en un momento dado.
+
+  Columnas:
+
+    id
+      Tipo:      INTEGER
+      Restric.:  PRIMARY KEY, AUTOINCREMENT
+      Descrip.:  Identificador único auto-generado para cada sesión.
+
+    created_at
+      Tipo:      TEXT
+      Restric.:  NOT NULL
+      Descrip.:  Fecha y hora de creación de la sesión en formato ISO 8601
+                 (ej: "2026-05-25T10:30:00.000Z").
+
+    player_name
+      Tipo:      TEXT
+      Restric.:  NOT NULL, DEFAULT 'Unknown'
+      Descrip.:  Nombre del jugador que realizó la sesión.
+
+    preset
+      Tipo:      TEXT
+      Restric.:  NULLABLE
+      Descrip.:  Nombre del preset/configuración predefinida usada en la
+                 sesión. Valores comunes: "topspin", "backspin", "random",
+                 "pro-drill", "calibración", "neutral".
+
+    duration_seconds
+      Tipo:      INTEGER
+      Restric.:  DEFAULT 0
+      Descrip.:  Duración total de la sesión en segundos. Por defecto 0
+                 cuando no se mide la duración.
+
+    ball_count
+      Tipo:      INTEGER
+      Restric.:  DEFAULT 0
+      Descrip.:  Cantidad total de pelotas lanzadas por la máquina durante
+                 la sesión.
+
+    top_motor_speed
+      Tipo:      INTEGER
+      Restric.:  NULLABLE
+      Descrip.:  Velocidad del motor superior (0-100%). Se corresponde con
+                 el campo topMotorSpeed del modelo PingPongShot.
+
+    bottom_motor_speed
+      Tipo:      INTEGER
+      Restric.:  NULLABLE
+      Descrip.:  Velocidad del motor inferior (0-100%). Se corresponde con
+                 el campo bottomMotorSpeed del modelo PingPongShot.
+
+    horizontal_angle
+      Tipo:      INTEGER
+      Restric.:  NULLABLE
+      Descrip.:  Ángulo horizontal del lanzador (0-180 grados). Valor por
+                 defecto en la app: 90. Se corresponde con el campo
+                 horizontalAngle del modelo PingPongShot.
+
+    launch_interval
+      Tipo:      REAL
+      Restric.:  NULLABLE
+      Descrip.:  Intervalo entre lanzamientos en segundos. Valor por
+                 defecto en la app: 1.0. Se corresponde con el campo
+                 interval del modelo PingPongShot.
+
+  SQL DDL:
+    CREATE TABLE training_sessions (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at          TEXT NOT NULL,
+      player_name         TEXT NOT NULL DEFAULT 'Unknown',
+      preset              TEXT,
+      duration_seconds    INTEGER DEFAULT 0,
+      ball_count          INTEGER DEFAULT 0,
+      top_motor_speed     INTEGER,
+      bottom_motor_speed  INTEGER,
+      horizontal_angle    INTEGER,
+      launch_interval     REAL
+    );
+
+
+================================================================================
+  ESTRUCTURA DETALLADA - sensor_readings
+================================================================================
+
+  Descripción:
+    Almacena los eventos de detección del sensor infrarrojo IR-08H
+    recibidos vía MQTT desde el ESP32. Cuando una pelota es devuelta
+    por el jugador y pasa frente al sensor, se registra un evento con
+    el conteo actualizado de pelotas devueltas.
+
+    Sensor: IR-08H (sensor infrarrojo de detección de objetos)
+    Ubicación: Acoplado a la máquina lanzadora de ping pong
+    Función: Detectar el paso de una pelota devuelta por el jugador
+             y contar cuántas han regresado a la máquina.
+
+  Columnas:
+
+    id
+      Tipo:      INTEGER
+      Restric.:  PRIMARY KEY, AUTOINCREMENT
+      Descrip.:  Identificador único auto-generado para cada lectura.
+
+    session_id
+      Tipo:      INTEGER
+      Restric.:  FK -> training_sessions(id), NULLABLE
+      Descrip.:  Referencia opcional a la sesión de entrenamiento durante
+                 la cual se registró la detección.
+
+    timestamp
+      Tipo:      TEXT
+      Restric.:  NOT NULL
+      Descrip.:  Fecha y hora de recepción del mensaje en formato ISO 8601.
+
+    topic
+      Tipo:      TEXT
+      Restric.:  NOT NULL
+      Descrip.:  Topic MQTT del mensaje. Tópicos típicos:
+                 - "infinitedecimal/pingpong/status" (estado del ESP32)
+                 - "infinitedecimal/pingpong/data" (datos del sensor IR)
+
+    balls_returned
+      Tipo:      INTEGER
+      Restric.:  NULLABLE
+      Descrip.:  Conteo acumulado de pelotas detectadas por el sensor
+                 IR-08H al pasar frente a él. Se incrementa cada vez
+                 que el jugador devuelve una pelota a la máquina.
+                 Ej: 1, 2, 3, ... N.
+
+    voltage
+      Tipo:      REAL
+      Restric.:  NULLABLE
+      Descrip.:  Voltaje de alimentación reportado por el ESP32 en
+                 voltios (V). Útil para monitorear batería o fuente.
+
+    payload_json
+      Tipo:      TEXT
+      Restric.:  NULLABLE
+      Descrip.:  Payload JSON original completo del mensaje MQTT, para
+                 depuración o extracción de campos adicionales.
+
+  SQL DDL:
+    CREATE TABLE sensor_readings (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id      INTEGER,
+      timestamp       TEXT NOT NULL,
+      topic           TEXT NOT NULL,
+      balls_returned  INTEGER,
+      voltage         REAL,
+      payload_json    TEXT
+    );
+
+
+================================================================================
+  RELACIONES
+================================================================================
+
+  training_sessions (1) ─────── (N) sensor_readings
+        id                              session_id (FK)
+
+  Una sesión puede tener cero o múltiples detecciones del sensor IR-08H.
+  Cada detección representa una pelota devuelta por el jugador.
+
+  Al eliminar una sesión (DELETE), se eliminan todas sus lecturas de
+  sensor asociadas (borrado manual en el código, no hay ON DELETE CASCADE
+  a nivel SQLite).
+
+
+================================================================================
+  MAPEO OBJETO-RELACIONAL (ORM Manual)
+================================================================================
+
+  PingPongShot (Dart model)  <->  training_sessions (tabla)
+
+    Campo Dart                  Columna SQLite          Tipo SQL
+    --------------------------  ----------------------  ----------
+    topMotorSpeed               top_motor_speed         INTEGER
+    bottomMotorSpeed            bottom_motor_speed      INTEGER
+    horizontalAngle             horizontal_angle        INTEGER
+    interval                    launch_interval         REAL
+
+    Métodos de conversión:
+      PingPongShot.toMap()     ->  Map con keys en snake_case
+      PingPongShot.fromMap()   <-  Map con keys en snake_case
+      PingPongShot.toJson()    ->  Map con keys en camelCase
+      PingPongShot.fromJson()  <-  Map con keys en camelCase
+
+  SensorReading (Dart model)  <->  sensor_readings (tabla)
+
+    Campo Dart                  Columna SQLite          Tipo SQL
+    --------------------------  ----------------------  ----------
+    id                          id                      INTEGER
+    sessionId                   session_id              INTEGER
+    timestamp                   timestamp               TEXT
+    topic                       topic                   TEXT
+    ballsReturned               balls_returned          INTEGER
+    voltage                     voltage                 REAL
+    payloadJson                 payload_json            TEXT
+
+    Métodos de conversión:
+      SensorReading.toMap()     ->  Map con keys en snake_case
+      SensorReading.fromMap()   <-  Map con keys en snake_case
+      SensorReading.toJson()    ->  Map con keys en camelCase
+      SensorReading.fromJson()  <-  Map con keys en camelCase
+
+
+================================================================================
+  FLUJO DE DATOS DEL SENSOR IR-08H
+================================================================================
+
+  ESP32                         MQTT                          Flutter App
+  ──────                        ────                          ──────────
+
+  Sensor IR-08H
+  detecta pelota
+       │
+       ▼
+  ESP32 lee pulso
+  del sensor
+       │
+       ▼
+  Publica JSON:
+  {"balls_returned": 5}  ───►  broker.hivemq.com  ───►  mqtt_service.dart
+                                   topic:                     │
+                            infinitedecimal/                  │
+                            pingpong/data                    ▼
+                                                      _handleIncomingMessage()
+                                                           │
+                                                           ▼
+                                                      SensorReading
+                                                      (ballsReturned: 5)
+                                                           │
+                                                           ▼
+                                                      DatabaseService
+                                                      .insertSensorReading()
+                                                           │
+                                                           ▼
+                                                      SQLite local
+                                                      sensor_readings
+                                                      (nueva fila)
+
+
+================================================================================
+  HARDWARE - Sensor IR-08H
+================================================================================
+
+  Especificaciones:
+    Modelo:     IR-08H
+    Tipo:       Sensor infrarrojo de detección de objetos
+    Alcance:    3-80 cm (ajustable)
+    Salida:     Señal digital (HIGH/LOW) al detectar obstáculo
+    Tensión:    3.3V - 5V DC
+
+  Conexión al ESP32:
+    VCC     ->  3.3V / 5V
+    GND     ->  GND
+    OUT     ->  Pin GPIO (configurable en código ESP32)
+
+  Funcionamiento:
+    El sensor IR-08H emite luz infrarroja y detecta la reflexión.
+    Cuando una pelota de ping pong pasa frente al sensor, la señal
+    de salida cambia de estado (usualmente LOW -> HIGH o viceversa),
+    indicando la presencia del objeto.
+
+  Propósito en el proyecto:
+    Detectar cada vez que una pelota lanzada es devuelta por el
+    jugador y pasa frente a la máquina. Esto permite:
+    - Contar pelotas devueltas (balls_returned)
+    - Comparar con pelotas lanzadas (ball_count en training_sessions)
+    - Calcular tasa de retorno/precisión del jugador
+
+
+================================================================================
+  MÉTODOS DEL SERVICIO (DatabaseService)
+================================================================================
+
+  init()
+    Abre (o crea) la base de datos SQLite en:
+      {getApplicationDocumentsDirectory()}/pingpong.db
+    Ejecuta el schema (CREATE TABLE + CREATE INDEX) si es la primera vez.
+    Implementa singleton: si ya está abierta, no hace nada.
+
+  insertSession({shot, playerName, preset, durationSeconds, ballCount})
+    Inserta una nueva fila en training_sessions.
+    Retorna: el id de la fila insertada (int).
+
+  getSessions({limit = 50})
+    Obtiene las últimas N sesiones ordenadas por created_at DESC.
+    Retorna: List<Map<String, dynamic>> donde cada mapa contiene:
+      id, created_at, player_name, preset, duration_seconds,
+      ball_count, shot_config (sub-mapa con topMotorSpeed,
+      bottomMotorSpeed, horizontalAngle, interval)
+
+  deleteSession(int id)
+    Elimina una sesión por id (primero sus sensor_readings asociadas).
+    Retorna: número de filas eliminadas de training_sessions (int).
+
+  insertSensorReading(SensorReading reading)
+    Inserta una nueva fila en sensor_readings (detección IR-08H).
+    Retorna: el id de la fila insertada (int).
+
+  getSensorReadings({sessionId, limit = 100})
+    Obtiene lecturas del sensor IR-08H, opcionalmente filtradas por
+    session_id. Retorna: List<SensorReading>.
+
+  getSensorReadingsBySession(int sessionId)
+    Obtiene hasta 1000 lecturas del sensor para una sesión específica.
+    Retorna: List<SensorReading>.
+
+  close()
+    Cierra la conexión a la base de datos.
+
+
+================================================================================
+  PATRÓN DE DISEÑO
+================================================================================
+
+  DatabaseService usa el patrón Singleton:
+    - Instancia única global
+    - Acceso mediante DatabaseService() (factory constructor)
+    - Previene múltiples conexiones a SQLite
+    - Inicialización lazy: la BD se abre en el primer init() o en la
+      primera operación que la requiera (auto-init en cada método)
+
+
+================================================================================
+  UBICACIÓN DEL ARCHIVO
+================================================================================
+
+  Plataforma   Ruta típica
+  -----------  ------------------------------------------------------------
+  Linux        ~/.local/share/<app>/pingpong.db
+  Android      /data/data/<package>/app_flutter/pingpong.db
+  iOS          NSDocumentDirectory/pingpong.db
+  macOS        ~/Library/Application Support/<app>/pingpong.db
+  Windows      %APPDATA%/<app>/pingpong.db
+
+  La ruta exacta depende de getApplicationDocumentsDirectory() de
+  path_provider.

@@ -1,0 +1,252 @@
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║         MODELO ENTIDAD-RELACIÓN - PING PONG IoT (SQLite Local)              ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+Base de datos: pingpong.db
+Motor: SQLite (sqflite)
+Versión del esquema: 1
+
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                          DIAGRAMA ENTIDAD-RELACIÓN                          ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+    ┌──────────────────────────────────┐
+    │         TRAINING_SESSIONS        │
+    ├──────────────────────────────────┤
+    │ PK  id                 INTEGER   │──┐
+    │     created_at         TEXT      │  │
+    │     player_name        TEXT      │  │
+    │     preset             TEXT      │  │  (1)
+    │     duration_seconds   INTEGER   │  │
+    │     ball_count         INTEGER   │  │
+    │     top_motor_speed    INTEGER   │  │
+    │     bottom_motor_speed INTEGER   │  │
+    │     horizontal_angle   INTEGER   │  │
+    │     launch_interval    REAL      │  │
+    └──────────────────────────────────┘  │
+                                          │
+          ┌───────────────────────────────┘
+          │
+          ▼
+    ┌──────────────────────────────────┐
+    │         SENSOR_READINGS           │
+    ├──────────────────────────────────┤
+    │ PK  id                 INTEGER   │
+    │ FK  session_id         INTEGER   │── (N) ──┘
+    │     timestamp          TEXT      │
+    │     topic              TEXT      │
+    │     balls_returned     INTEGER   │
+    │     voltage            REAL      │
+    │     payload_json       TEXT      │
+    └──────────────────────────────────┘
+
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                        DESCRIPCIÓN DE ENTIDADES                              ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ENTIDAD: training_sessions                                                  │
+│ Descripción: Almacena las sesiones de entrenamiento realizadas.              │
+│              Cada sesión representa una configuración de lanzamiento         │
+│              que fue ejecutada, con sus parámetros y resultados.             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Atributos:                                                                   │
+│                                                                            │
+│  id                INTEGER  PK, AUTOINCREMENTAL                             │
+│   └─ Identificador único de la sesión.                                      │
+│                                                                            │
+│  created_at        TEXT     NOT NULL                                        │
+│   └─ Fecha y hora de creación en formato ISO 8601.                          │
+│      Ej: "2025-06-07T15:30:00.000"                                         │
+│                                                                            │
+│  player_name       TEXT     NOT NULL  DEFAULT 'Unknown'                     │
+│   └─ Nombre del jugador que realizó la sesión.                              │
+│                                                                            │
+│  preset            TEXT     NULLABLE                                        │
+│   └─ Nombre del preset usado (si aplica).                                   │
+│      Valores posibles: "Topspin", "Backspin", "Aleatorio", "Pro-Drill"      │
+│                                                                            │
+│  duration_seconds  INTEGER  DEFAULT 0                                       │
+│   └─ Duración total de la sesión en segundos.                               │
+│                                                                            │
+│  ball_count        INTEGER  DEFAULT 0                                       │
+│   └─ Cantidad de pelotas lanzadas durante la sesión.                        │
+│                                                                            │
+│  top_motor_speed   INTEGER  NULLABLE                                        │
+│   └─ Velocidad del motor superior (0-100%).                                 │
+│                                                                            │
+│  bottom_motor_speed INTEGER NULLABLE                                        │
+│   └─ Velocidad del motor inferior (0-100%).                                 │
+│                                                                            │
+│  horizontal_angle  INTEGER  NULLABLE                                        │
+│   └─ Ángulo horizontal de oscilación (0-90°).                               │
+│                                                                            │
+│  launch_interval   REAL     NULLABLE                                        │
+│   └─ Intervalo entre lanzamientos en segundos.                              │
+│      Calculado a partir de BPM (ej: 60 BPM → 1.0s).                        │
+│                                                                            │
+│ Índices:                                                                     │
+│  idx_sessions_created ON (created_at DESC)                                  │
+│   └─ Optimiza consultas de historial ordenado por fecha.                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ENTIDAD: sensor_readings                                                     │
+│ Descripción: Almacena lecturas del sensor infrarrojo IR-08H recibidas        │
+│              vía MQTT desde el ESP32. Cada lectura representa un             │
+│              reporte periódico del sensor.                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Atributos:                                                                   │
+│                                                                            │
+│  id               INTEGER  PK, AUTOINCREMENTAL                              │
+│   └─ Identificador único de la lectura.                                     │
+│                                                                            │
+│  session_id       INTEGER  FK NULLABLE                                      │
+│   └─ Referencia a la sesión de entrenamiento activa durante la lectura.     │
+│      ⟶ REFERENCIA: training_sessions(id)                                   │
+│      Puede ser NULL si la lectura ocurre fuera de una sesión.               │
+│                                                                            │
+│  timestamp        TEXT     NOT NULL                                         │
+│   └─ Fecha y hora de la lectura en formato ISO 8601.                        │
+│                                                                            │
+│  topic            TEXT     NOT NULL                                         │
+│   └─ Topic MQTT de origen.                                                  │
+│      Ej: "pingpong/data", "pingpong/status", "pingpong/sensor"              │
+│                                                                            │
+│  balls_returned   INTEGER  NULLABLE                                         │
+│   └─ Número de pelotas devueltas detectadas por el sensor IR-08H.           │
+│                                                                            │
+│  voltage          REAL     NULLABLE                                         │
+│   └─ Voltaje del sensor en voltios.                                         │
+│                                                                            │
+│  payload_json     TEXT     NULLABLE                                         │
+│   └─ Payload completo del mensaje MQTT en JSON (para depuración).           │
+│                                                                            │
+│ Índices:                                                                     │
+│  idx_sensors_session  ON (session_id)                                       │
+│   └─ Optimiza consultas de lecturas por sesión.                             │
+│                                                                            │
+│  idx_sensors_timestamp ON (timestamp DESC)                                  │
+│   └─ Optimiza consultas ordenadas por fecha.                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                            RELACIONES                                        ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ RELACIÓN: training_sessions ──< sensor_readings                              │
+│                                                                            │
+│  Tipo:    Uno a Muchos (1:N)                                                │
+│  Tabla:   training_sessions (lado 1)                                        │
+│           sensor_readings (lado N)                                          │
+│                                                                            │
+│  Cardinalidad:                                                              │
+│   - Una sesión de entrenamiento puede tener CERO o MUCHAS lecturas         │
+│     de sensor asociadas.                                                    │
+│   - Una lectura de sensor puede pertenecer a UNA o NINGUNA sesión           │
+│     (session_id nullable).                                                  │
+│                                                                            │
+│  Restricción:                                                               │
+│   - Al eliminar una sesión (DELETE CASCADE lógico), se eliminan             │
+│     todas sus lecturas de sensor asociadas.                                 │
+│   - No hay restricción EXPLÍCITA de foreign key en SQLite (la integridad    │
+│     se maneja desde la lógica de la aplicación en DatabaseService).         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                              MAPEO OBJETOS (ORM)                             ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PingPongShot (lib/core/models/ping_pong_shot.dart)                           │
+│                                                                            │
+│  Atributo Dart         │ Columna SQLite          │ Tipo SQL                 │
+│ ───────────────────────┼────────────────────────┼────────────────────────── │
+│  topMotorSpeed         │ top_motor_speed         │ INTEGER                  │
+│  bottomMotorSpeed      │ bottom_motor_speed      │ INTEGER                  │
+│  horizontalAngle        │ horizontal_angle        │ INTEGER                  │
+│  interval              │ launch_interval         │ REAL                     │
+│                                                                            │
+│  toMap() → se expande en training_sessions junto con created_at,            │
+│            player_name, preset, duration_seconds, ball_count                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SensorReading (lib/core/models/sensor_reading.dart)                          │
+│                                                                            │
+│  Atributo Dart         │ Columna SQLite          │ Tipo SQL                 │
+│ ───────────────────────┼────────────────────────┼────────────────────────── │
+│  id                    │ id                      │ INTEGER PK               │
+│  sessionId             │ session_id              │ INTEGER (FK)             │
+│  timestamp             │ timestamp               │ TEXT                     │
+│  topic                 │ topic                   │ TEXT                     │
+│  ballsReturned         │ balls_returned          │ INTEGER                  │
+│  voltage               │ voltage                 │ REAL                     │
+│  payloadJson            │ payload_json            │ TEXT                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                           SENTENCIAS DDL                                     ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+-- Creación de tablas
+CREATE TABLE training_sessions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at      TEXT NOT NULL,
+    player_name     TEXT NOT NULL DEFAULT 'Unknown',
+    preset          TEXT,
+    duration_seconds INTEGER DEFAULT 0,
+    ball_count      INTEGER DEFAULT 0,
+    top_motor_speed INTEGER,
+    bottom_motor_speed INTEGER,
+    horizontal_angle INTEGER,
+    launch_interval REAL
+);
+
+CREATE TABLE sensor_readings (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id      INTEGER,
+    timestamp       TEXT NOT NULL,
+    topic           TEXT NOT NULL,
+    balls_returned  INTEGER,
+    voltage         REAL,
+    payload_json    TEXT
+);
+
+-- Índices
+CREATE INDEX idx_sessions_created ON training_sessions(created_at DESC);
+CREATE INDEX idx_sensors_session ON sensor_readings(session_id);
+CREATE INDEX idx_sensors_timestamp ON sensor_readings(timestamp DESC);
+
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                       NOTAS ADICIONALES                                      ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+• SQLite no soporta FOREIGN KEY de forma obligatoria por defecto
+  (PRAGMA foreign_keys = OFF). La integridad referencial se maneja
+  desde la capa de aplicación (DatabaseService.deleteSession()
+  elimina manualmente las sensor_readings hijas antes de borrar la
+  training_session padre).
+
+• Todos los campos de configuración de tiro (top_motor_speed,
+  bottom_motor_speed, horizontal_angle, launch_interval) están
+  desnormalizados dentro de training_sessions para evitar joins
+  innecesarios al mostrar el historial.
+
+• Los timestamps se almacenan como TEXT en formato ISO 8601 por
+  compatibilidad multiplataforma en SQLite.
+
+• El campo payload_json en sensor_readings permite almacenar el
+  mensaje MQTT completo para depuración futura sin pérdida de datos.
+
+• La sesión_id puede ser NULL porque el sensor puede reportar datos
+  incluso cuando no hay una sesión de entrenamiento activa.
